@@ -87,7 +87,7 @@ mkdir -p ~/storage/downloads/yt-dlp
 Bajarlo de github
 ```bash
 cd ~
-git clone https://github.com/TU_USUARIO/termux-space-whisper.git
+git clone https://github.com/mannymny/termux-space-whisper.git
 ```
 
 Hacerlo global y dar permisos
