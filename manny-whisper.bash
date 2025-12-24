@@ -96,8 +96,8 @@ BEGIN{
   print "Progress: 0% (0:00 / " total_mmss ")" > "/dev/stderr";
 }
 /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/{
-  if (match($0, /^\[([0-9]{2}):([0-9]{2}):([0-9]{2})/, t)) {
-    sec = (t[1]+0)*3600 + (t[2]+0)*60 + (t[3]+0);
+  if (match($0, /^\[([0-9]{2}):([0-9]{2}):([0-9]{2})/, ts)) {
+    sec = (ts[1]+0)*3600 + (ts[2]+0)*60 + (ts[3]+0);
     if (sec > last_done) last_done = sec;
 
     pct = int((last_done * 100) / total_sec);
@@ -123,8 +123,8 @@ END{
   for (m=0; m<total_min; m++){
     a = hhmmss(m*60);
     b = hhmmss((m+1)*60);
-    t = (m in buf && length(buf[m])>0) ? buf[m] : "(no text)";
-    print "[" a "] -> [" b "] " t "\n";
+    txt = (m in buf && length(buf[m])>0) ? buf[m] : "(no text)";
+    print "[" a "] -> [" b "] " txt "\n";
   }
 }
 ' > "$OUT"
