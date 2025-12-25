@@ -1,6 +1,7 @@
 # termux-space-whisper
 
 Descarga un space de Twitter, extrae el audio y genera una **minuta por minuto** y lo guarda en txt para que lo puedas leer o hacer búsquedas
+Es igual que el [space-whisper](https://github.com/mannymny/space-whisper) pero para celular
 
 El script `manny-whisper.bash` hace:
 
