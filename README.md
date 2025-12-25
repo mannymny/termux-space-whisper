@@ -37,7 +37,7 @@ termux-setup-storage
 
 ```bash
 pkg update -y && pkg upgrade -y
-pkg install -y git cmake clang make ffmpeg python
+pkg install -y git cmake clang make ffmpeg python libiconv
 ```
 
 ### 4. Clonar whisper.cpp
