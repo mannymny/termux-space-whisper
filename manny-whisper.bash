@@ -76,7 +76,7 @@ echo "$HELP" | grep -qE '(^|[[:space:]])-bs([[:space:]]|,)' && EXTRA+=(-bs 1)
 echo "$HELP" | grep -qE '(^|[[:space:]])-bo([[:space:]]|,)' && EXTRA+=(-bo 1)
 
 echo "Transcribing with $THREADS threads..."
-echo "Progress will update as timestamps are produced..."
+echo "Progress will update are produced..."
 
 "$BIN" -m "$MODEL" -f "$WAV" -l es -t "$THREADS" "${EXTRA[@]}" 2>/dev/null \
 | awk -v total_min="$TOTAL_MIN" -v total_sec="$TOTAL_SEC" -v total_mmss="$TOTAL_MMSS" '
@@ -127,7 +127,7 @@ END{
     print "[" a "] -> [" b "] " txt "\n";
   }
 }
-' > "$OUT"
+' | iconv -f UTF-8 -t ASCII//TRANSLIT > "$OUT"
 
 echo "Done:"
 echo "$OUT"
