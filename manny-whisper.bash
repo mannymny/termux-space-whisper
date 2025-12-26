@@ -28,6 +28,7 @@ if [ ! -f "$MODEL" ]; then
   exit 1
 fi
 
+# Threads
 MAX_THREADS="$(nproc)"
 THREADS="${T_IN:-$MAX_THREADS}"
 
@@ -41,6 +42,7 @@ if [ "$THREADS" -gt "$MAX_THREADS" ]; then
   THREADS="$MAX_THREADS"
 fi
 
+# Download
 yt-dlp --no-playlist \
   -N 8 --concurrent-fragments 8 \
   -x --audio-format m4a \
@@ -54,6 +56,7 @@ if [ -z "${AUDIO:-}" ]; then
   exit 1
 fi
 
+# Duration helpers
 TOTAL_SEC="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$AUDIO" \
   | awk '{printf("%d\n",$1+0.5)}')"
 TOTAL_MIN=$(( (TOTAL_SEC + 59) / 60 ))
@@ -61,6 +64,7 @@ TOTAL_MMSS="$(awk -v s="$TOTAL_SEC" 'BEGIN{m=int(s/60); ss=s%60; printf "%d:%02d
 
 SAFE="$(basename "$AUDIO" | sed 's/[^A-Za-z0-9._-]/_/g')"
 OUT="$DEST/${SAFE%.*}_minuta_1min.txt"
+LOG="$DEST/${SAFE%.*}_whisper.log"
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -70,15 +74,32 @@ WAV="$TMPDIR/in.wav"
 echo "Converting to 16kHz mono WAV..."
 ffmpeg -loglevel error -y -i "$AUDIO" -vn -ac 1 -ar 16000 -c:a pcm_s16le "$WAV"
 
+# Build EXTRA flags based on what's supported by your whisper-cli
 EXTRA=()
 HELP="$("$BIN" -h 2>&1 || true)"
+
+# Keep your old optional flags if present
 echo "$HELP" | grep -qE '(^|[[:space:]])-bs([[:space:]]|,)' && EXTRA+=(-bs 1)
 echo "$HELP" | grep -qE '(^|[[:space:]])-bo([[:space:]]|,)' && EXTRA+=(-bo 1)
 
-echo "Transcribing with $THREADS threads..."
-echo "Progress will update are produced..."
+# --- anti-hallucination / VAD (if supported) ---
+# Tune via env vars if needed
+VAD_THOLD="${VAD_THOLD:-0.7}"       # 0.6–0.8 typical: higher = more aggressive VAD
+VAD_MS="${VAD_MS:-250}"             # VAD window in ms
+NO_SPEECH="${NO_SPEECH:-0.6}"       # if supported
+LOGPROB="${LOGPROB:--1.0}"          # if supported (more strict if higher)
 
-"$BIN" -m "$MODEL" -f "$WAV" -l es -t "$THREADS" "${EXTRA[@]}" 2>/dev/null \
+echo "$HELP" | grep -qE '(^|[[:space:]])--vad-thold([[:space:]]|,)'       && EXTRA+=(--vad-thold "$VAD_THOLD")
+echo "$HELP" | grep -qE '(^|[[:space:]])--vad-ms([[:space:]]|,)'          && EXTRA+=(--vad-ms "$VAD_MS")
+echo "$HELP" | grep -qE '(^|[[:space:]])--no-speech-thold([[:space:]]|,)' && EXTRA+=(--no-speech-thold "$NO_SPEECH")
+echo "$HELP" | grep -qE '(^|[[:space:]])--logprob-thold([[:space:]]|,)'   && EXTRA+=(--logprob-thold "$LOGPROB")
+
+echo "Transcribing with $THREADS threads..."
+echo "Progress will update as segments are produced..."
+echo "Whisper log: $LOG"
+
+# Run whisper, keep stdout for parsing, put stderr in a log
+"$BIN" -m "$MODEL" -f "$WAV" -l es -t "$THREADS" "${EXTRA[@]}" 2>"$LOG" \
 | awk -v total_min="$TOTAL_MIN" -v total_sec="$TOTAL_SEC" -v total_mmss="$TOTAL_MMSS" '
 function hhmmss(sec,  h,m,s){
   h=int(sec/3600); m=int((sec%3600)/60); s=sec%60;
@@ -93,6 +114,8 @@ BEGIN{
   print "";
   last_pct = -1;
   last_done = 0;
+  last_text = "";
+  last_sec = -999999;
   print "Progress: 0% (0:00 / " total_mmss ")" > "/dev/stderr";
 }
 /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/{
@@ -112,7 +135,17 @@ BEGIN{
     sub(/^\[[^]]*\][[:space:]]*/, "", text);
     gsub(/[[:space:]]+/, " ", text);
 
+    # Anti-loop / anti-repeat:
+    # 1) If identical text repeats within 2 seconds, drop it.
+    # 2) If identical text already appeared in the same minute, drop it.
+    key = min ":" text
     if (length(text) > 0) {
+      if (text == last_text && sec <= last_sec + 2) next
+      if (seen[key]++) next
+
+      last_text = text
+      last_sec  = sec
+
       buf[min] = (buf[min] ? buf[min] " " : "") text;
     }
   }
